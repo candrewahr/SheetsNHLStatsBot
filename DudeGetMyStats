@@ -1,0 +1,344 @@
+function DudeGetMyStats() 
+{
+var json = getTeamStats(12);
+  //so I still need to sort out pim / gp...
+  var hurricanes = new TeamStats("Hurricanes", json.teams[0].teamStats[0].splits[0].stat.wins+"-"+json.teams[0].teamStats[0].splits[0].stat.losses+"-"
+                    +json.teams[0].teamStats[0].splits[0].stat.ot,
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.goalsPerGame).toFixed(2), 
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.goalsAgainstPerGame).toFixed(2), 
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.shotsPerGame).toFixed(2), 
+                    json.teams[0].teamStats[0].splits[0].stat.faceOffWinPercentage +'%', 
+                    json.teams[0].teamStats[0].splits[0].stat.powerPlayPercentage + '% ('+ json.teams[0].teamStats[0].splits[1].stat.powerPlayPercentage+')', 
+                    json.teams[0].teamStats[0].splits[0].stat.penaltyKillPercentage  + '% ('+json.teams[0].teamStats[0].splits[1].stat.penaltyKillPercentage+')',"dummyVal",
+                    "dummyVal", "dummyVal");    
+
+
+  //get next opponent
+  var enemyTeam = getNextOpponent();
+
+  json = getTeamStats(enemyTeam)
+  var enemy = new TeamStats(json.teams[0].teamName, json.teams[0].teamStats[0].splits[0].stat.wins+"-"+json.teams[0].teamStats[0].splits[0].stat.losses+"-"
+                    +json.teams[0].teamStats[0].splits[0].stat.ot,
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.goalsPerGame).toFixed(2), 
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.goalsAgainstPerGame).toFixed(2), 
+                    parseFloat(json.teams[0].teamStats[0].splits[0].stat.shotsPerGame).toFixed(2), 
+                    json.teams[0].teamStats[0].splits[0].stat.faceOffWinPercentage +'%', 
+                    json.teams[0].teamStats[0].splits[0].stat.powerPlayPercentage + '% ('+ json.teams[0].teamStats[0].splits[1].stat.powerPlayPercentage+')', 
+                    json.teams[0].teamStats[0].splits[0].stat.penaltyKillPercentage  + '% ('+json.teams[0].teamStats[0].splits[1].stat.penaltyKillPercentage+')',"dummyVal",
+                    "dummyVal", "dummyval"); 
+
+  //get fancy stats for both teams
+  var hurricanesFancyStats = getCorsiStats(12);
+  //apply fancy stats
+  if(hurricanesFancyStats != null)
+  {
+    // @ts-ignore
+    hurricanes.evenStrengthCorsiFor = parseFloat(hurricanesFancyStats.satPct*100).toFixed(2)+"%"; 
+    // @ts-ignore
+    hurricanes.evenStrengthPDO = parseFloat(hurricanesFancyStats.shootingPlusSavePct5v5*100).toFixed(2);
+  }
+  var enemyFancyStats = getCorsiStats(enemyTeam);
+  if(enemyFancyStats != null)
+  {
+    // @ts-ignore
+    enemy.evenStrengthCorsiFor = parseFloat(enemyFancyStats.satPct*100).toFixed(2)+"%";
+    // @ts-ignore
+    enemy.evenStrengthPDO = parseFloat(enemyFancyStats.shootingPlusSavePct5v5*100).toFixed(2);
+  }
+
+  //penalty stats
+  var hurricanesPimStats = getPimStats(12);
+  if(hurricanesPimStats != null)
+  {
+    // @ts-ignore
+     var unformattedTime1 = parseFloat(hurricanesPimStats.penaltyMinutes / hurricanesPimStats.gamesPlayed).toFixed(2);
+    var formattedTime1 = minTommss(unformattedTime1);
+    hurricanes.penaltiesInMinutesPerGP = formattedTime1;
+  }
+  var enemyPimStats = getPimStats(enemyTeam);
+  if(hurricanesPimStats != null)
+  {
+    // @ts-ignore
+    var unformattedTime2 = parseFloat(enemyPimStats.penaltyMinutes / enemyPimStats.gamesPlayed).toFixed(2);
+    var formattedTime2 = minTommss(unformattedTime2);
+    enemy.penaltiesInMinutesPerGP = formattedTime2;
+  }
+
+  
+  var goalieInfo = getGoalieStats(enemyTeam);
+  writeToSheet(hurricanes, enemy, goalieInfo);
+
+}
+
+
+//this is the all-important corsi endpoint, treat it with care and make sure to update the final 8 digits to reflect the current season
+var corsiEndpoint = "https://api.nhle.com/stats/rest/en/team/percentages?isAggregate=false&isGame=false&sort=%5B%7B%22property%22:%22satPct%22,%22direction%22:%22DESC%22%7D%5D&start=0&limit=50&factCayenneExp=gamesPlayed%3E=1&cayenneExp=gameTypeId=2%20and%20seasonId%3C=20212022%20and%20seasonId%3E=20212022"
+
+var pimEndpoint = "https://api.nhle.com/stats/rest/en/team/penalties?isAggregate=false&isGame=false&sort=%5B%7B%22property%22:%22penaltyMinutes%22,%22direction%22:%22DESC%22%7D%5D&start=0&limit=50&factCayenneExp=gamesPlayed%3E=1&cayenneExp=gameTypeId=2%20and%20seasonId%3C=20212022%20and%20seasonId%3E=20212022";
+
+//this is the team stats endpoint.  12 is the hurricanes, you need to drop a different key in there in order to get a different team stats object
+var statsEndpoint = "https://statsapi.web.nhl.com/api/v1/teams/12/?expand=team.stats";
+
+
+//this is james reimer's ID, needs to be updated with whomever
+var goaliesEndpoint = "https://statsapi.web.nhl.com/api/v1/people/8473503/stats/?stats=statsSingleSeason&season=20212022"
+
+function minTommss(minutes){
+ var sign = minutes < 0 ? "-" : "";
+ var min = Math.floor(Math.abs(minutes));
+ var sec = Math.floor((Math.abs(minutes) * 60) % 60);
+ return sign + (min < 10 ? "0" : "") + min + ":" + (sec < 10 ? "0" : "") + sec;
+}
+
+function getTeamStats(teamId)
+{
+  var payload = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/teams/"+teamId+"/?expand=team.stats&season=20212022");
+  var json = JSON.parse(payload.getContentText());
+  return json;
+}
+
+function getNextOpponent()
+{
+  var nextOpponent = getNextGame();
+  var team1 = nextOpponent.teams[0].nextGameSchedule.dates[0].games[0].teams.home.team.id;
+  var team2 = nextOpponent.teams[0].nextGameSchedule.dates[0].games[0].teams.away.team.id;
+
+  if(team1 != 12)
+  {
+    var enemyTeam = team1;
+  }
+  else
+  {
+    var enemyTeam = team2;
+  }   
+
+  return enemyTeam;
+}
+
+function getCorsiStats(id)
+{
+  var payload = UrlFetchApp
+  .fetch("https://api.nhle.com/stats/rest/en/team/percentages?isAggregate=false&isGame=false&sort=%5B%7B%22property%22:%22satPct%22,%22direction%22:%22DESC%22%7D%5D&start=0&limit=50&factCayenneExp=gamesPlayed%3E=1&cayenneExp=gameTypeId=2%20and%20seasonId%3C=20212022%20and%20seasonId%3E=20212022");
+  var json = JSON.parse(payload.getContentText());
+
+   for(var i=0; i< json.data.length; i++) 
+   {
+     if(json.data[i].teamId == id && json.data[i].seasonId == 20212022)
+     {
+       return json.data[i];
+     }
+   }
+  return null;
+}
+
+function getPimStats(id)
+{
+  var payload = UrlFetchApp
+  .fetch(pimEndpoint);
+  var json = JSON.parse(payload.getContentText());
+
+   for(var i=0; i< json.data.length; i++) 
+   {
+     if(json.data[i].teamId == id && json.data[i].seasonId == 20212022)
+     {
+       return json.data[i];
+     }
+   }
+  return null;
+}
+
+function getGoalieStats(enemy)
+{
+  var payload = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/teams/"+enemy+"/?expand=team.roster");
+  var enemyTeam = JSON.parse(payload.getContentText());
+  var payload2 = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/teams/12/?expand=team.roster");
+  var hurricanes = JSON.parse(payload2.getContentText());
+
+  var enemyRoster = enemyTeam.teams[0].roster;
+  var hurricanesRoster = hurricanes.teams[0].roster; 
+  var enemyGoalies = new Array(10);
+  var enemyGoaliesStats = new Array(10);
+  var hurricanesGoalies = new Array(10);
+  var hurricanesGoaliesStats = new Array(10);
+  var enemyGoalieCounter = 0;
+  var hurricanesGoalieCounter = 0;
+  for(var i=0; i < enemyRoster.roster.length; i++){
+    if(enemyRoster.roster[i].position.code == "G"){
+      enemyGoalies[enemyGoalieCounter] = enemyRoster.roster[i].person;
+      enemyGoalieCounter++;
+    }
+  }
+  for(var i=0; i < hurricanesRoster.roster.length; i++){
+    if(hurricanesRoster.roster[i].position.code == "G"){
+       hurricanesGoalies[hurricanesGoalieCounter] = hurricanesRoster.roster[i].person;
+       hurricanesGoalieCounter++;
+    }
+  }
+
+  for(var i=0; i < enemyGoalies.length; i++){
+    if(enemyGoalies[i] != null){
+      var goalieInfo = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/people/"+enemyGoalies[i].id+"/stats/?stats=statsSingleSeason&season=20212022");  //these magic numbers bad
+      var enemyGoalieInfo = JSON.parse(goalieInfo.getContentText());
+      if(enemyGoalieInfo.stats[0].splits !=null && enemyGoalieInfo.stats[0].splits.length > 0)
+      {
+        enemyGoaliesStats[i] = enemyGoalieInfo.stats[0].splits[0].stat;
+      }
+    }
+  }
+
+    for(var i=0; i < hurricanesGoalies.length; i++){
+      if(hurricanesGoalies[i] != null){
+        var goalieInfo = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/people/"+hurricanesGoalies[i].id+"/stats/?stats=statsSingleSeason&season=20212022");  //these magic numbers bad
+        var hurricanesGoalieInfo = JSON.parse(goalieInfo.getContentText());
+        if(hurricanesGoalieInfo.stats[0].splits !=null && hurricanesGoalieInfo.stats[0].splits.length > 0)
+        {
+          hurricanesGoaliesStats[i] = hurricanesGoalieInfo.stats[0].splits[0].stat;
+        }
+      }
+    }
+    //merge name array and stats array -- i know, this is so hackey 
+    for(var i=0; i < hurricanesGoaliesStats.length; i++){
+      if(hurricanesGoaliesStats[i] != null){
+        hurricanesGoaliesStats[i].timeOnIce = hurricanesGoalies[i].fullName;          
+      }
+    }
+    for(var i=0; i < enemyGoaliesStats.length; i++){
+      if(enemyGoaliesStats[i] != null){
+        enemyGoaliesStats[i].timeOnIce = enemyGoalies[i].fullName;
+      }
+    }
+    // we need to sort by games played
+    hurricanesGoaliesStats.sort(compareGamesPlayed); 
+    enemyGoaliesStats.sort(compareGamesPlayed); 
+
+
+  var statsArray = new Array(2);
+  statsArray[0] = hurricanesGoaliesStats;
+  statsArray[1] = enemyGoaliesStats;
+
+  return statsArray;
+}
+
+function compareGamesPlayed( a , b ) {
+  if ( a.games < b.games && b.fullName){
+    return 1;
+  }
+  if ( a.games > b.games && a.fullName){
+    return -1;
+  }
+  return 0;
+}
+
+function getNextGame()
+{
+  var payload = UrlFetchApp.fetch("https://statsapi.web.nhl.com/api/v1/teams/12/?expand=team.schedule.next");
+  return JSON.parse(payload.getContentText());
+}
+
+function TeamStats(name, record, gpg, gapg, spg, fow, pp, pk, escf, espdo, pimpg ) {
+  this.name = name
+  this.record = record
+  this.goalsPerGame = gpg
+  this.goalsAgainstPerGame = gapg
+  this.shotsPerGame = spg
+  this.faceOffWinPercentage = fow
+  this.powerPlayPercentage = pp
+  this.penaltyKillPercentage = pk
+  this.evenStrengthCorsiFor = escf
+  this.evenStrengthPDO = espdo
+  this.penaltiesInMinutesPerGP = pimpg
+}
+
+function writeToSheet(hurricanes, enemy, goalieInfo)
+{
+  var teamStatsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Team Stats");
+  //hurricanes
+  teamStatsSheet.getRange("B2").setValue(hurricanes.record);
+  teamStatsSheet.getRange("B3").setValue(hurricanes.goalsPerGame);
+  teamStatsSheet.getRange("B4").setValue(hurricanes.goalsAgainstPerGame);
+  teamStatsSheet.getRange("B5").setValue(hurricanes.shotsPerGame);
+  teamStatsSheet.getRange("B6").setValue(hurricanes.faceOffWinPercentage);
+  teamStatsSheet.getRange("B7").setValue(hurricanes.powerPlayPercentage);
+  teamStatsSheet.getRange("B8").setValue(hurricanes.penaltyKillPercentage);
+  teamStatsSheet.getRange("B9").setValue(hurricanes.evenStrengthCorsiFor);
+  teamStatsSheet.getRange("B10").setValue(hurricanes.evenStrengthPDO);
+  teamStatsSheet.getRange("B11").setValue(hurricanes.penaltiesInMinutesPerGP);
+
+  //enemy
+  teamStatsSheet.getRange("C1").setValue(enemy.name);
+  teamStatsSheet.getRange("C2").setValue(enemy.record);
+  teamStatsSheet.getRange("C3").setValue(enemy.goalsPerGame);
+  teamStatsSheet.getRange("C4").setValue(enemy.goalsAgainstPerGame);
+  teamStatsSheet.getRange("C5").setValue(enemy.shotsPerGame);
+  teamStatsSheet.getRange("C6").setValue(enemy.faceOffWinPercentage);
+  teamStatsSheet.getRange("C7").setValue(enemy.powerPlayPercentage);
+  teamStatsSheet.getRange("C8").setValue(enemy.penaltyKillPercentage);
+  teamStatsSheet.getRange("C9").setValue(enemy.evenStrengthCorsiFor);
+  teamStatsSheet.getRange("C10").setValue(enemy.evenStrengthPDO);
+  teamStatsSheet.getRange("C11").setValue(enemy.penaltiesInMinutesPerGP);
+
+  //starting goalie info
+  var goalie1Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Goaltender 1");
+  //home 1
+  goalie1Sheet.getRange("B1").setValue(goalieInfo[0][0].timeOnIce); // lol this is where I put the name value, hilariously bad
+  goalie1Sheet.getRange("B2").setValue(goalieInfo[0][0].wins +"-"+ goalieInfo[0][0].losses +"-"+goalieInfo[0][0].ot); 
+  //a bit of hackey string formatting
+  var svp = parseFloat(goalieInfo[0][0].savePercentage).toFixed(3).toString();
+  var formattedSvp = svp.substring(1)
+  goalie1Sheet.getRange("B3").setValue(formattedSvp); 
+  goalie1Sheet.getRange("B4").setValue(parseFloat(goalieInfo[0][0].goalAgainstAverage).toFixed(2)); 
+
+//away 1
+  goalie1Sheet.getRange("C1").setValue(goalieInfo[1][0].timeOnIce); // lol this is where I put the name value, hilariously bad
+  goalie1Sheet.getRange("C2").setValue(goalieInfo[1][0].wins +"-"+ goalieInfo[1][0].losses +"-"+goalieInfo[1][0].ot); 
+  //more shitty formatting
+  var enemySvp = parseFloat(goalieInfo[1][0].savePercentage).toFixed(3).toString();
+  var enemyFormattedSvp = enemySvp.substring(1)
+  goalie1Sheet.getRange("C3").setValue(enemyFormattedSvp); 
+  goalie1Sheet.getRange("C4").setValue(parseFloat(goalieInfo[1][0].goalAgainstAverage).toFixed(2)); 
+
+  var goalie2Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Goaltender 2");
+  //backup goalie info
+  if(goalieInfo[0][1] != null){
+    goalie2Sheet.getRange("B1").setValue(goalieInfo[0][1].timeOnIce); // lol this is where I put the name value, hilariously bad
+    goalie2Sheet.getRange("B2").setValue(goalieInfo[0][1].wins +"-"+ goalieInfo[0][1].losses +"-"+goalieInfo[0][1].ot); 
+    //a bit of hackey string formatting
+    var svp = parseFloat(goalieInfo[0][1].savePercentage).toFixed(3).toString();
+    var formattedSvp = svp.substring(1)
+    goalie2Sheet.getRange("B3").setValue(formattedSvp); 
+    goalie2Sheet.getRange("B4").setValue(parseFloat(goalieInfo[0][1].goalAgainstAverage).toFixed(2)); 
+  } 
+
+  if(goalieInfo[1][1] != null){
+    goalie2Sheet.getRange("C1").setValue(goalieInfo[1][1].timeOnIce); // lol this is where I put the name value, hilariously bad
+    goalie2Sheet.getRange("C2").setValue(goalieInfo[1][1].wins +"-"+ goalieInfo[1][1].losses +"-"+goalieInfo[1][1].ot); 
+    //more shitty formatting
+    var enemySvp = parseFloat(goalieInfo[1][1].savePercentage).toFixed(3).toString();
+    var enemyFormattedSvp = enemySvp.substring(1)
+    goalie2Sheet.getRange("C3").setValue(enemyFormattedSvp); 
+    goalie2Sheet.getRange("C4").setValue(parseFloat(goalieInfo[1][1].goalAgainstAverage).toFixed(2)); 
+  } 
+
+  var goalie3Sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Goaltender 3");
+  //backup goalie info
+  if(goalieInfo[0][2] != null){
+    goalie3Sheet.getRange("B1").setValue(goalieInfo[0][2].timeOnIce); // lol this is where I put the name value, hilariously bad
+    goalie3Sheet.getRange("B2").setValue(goalieInfo[0][2].wins +"-"+ goalieInfo[0][2].losses +"-"+goalieInfo[0][2].ot); 
+    //a bit of hackey string formatting
+    var svp = parseFloat(goalieInfo[0][2].savePercentage).toFixed(3).toString();
+    var formattedSvp = svp.substring(1)
+    goalie3Sheet.getRange("B3").setValue(formattedSvp); 
+    goalie3Sheet.getRange("B4").setValue(parseFloat(goalieInfo[0][2].goalAgainstAverage).toFixed(2)); 
+  } 
+  if(goalieInfo[1][2] != null){
+    goalie3Sheet.getRange("C1").setValue(goalieInfo[1][2].timeOnIce); // lol this is where I put the name value, hilariously bad
+    goalie3Sheet.getRange("C2").setValue(goalieInfo[1][2].wins +"-"+ goalieInfo[1][2].losses +"-"+goalieInfo[1][2].ot); 
+    //a bit of hackey string formatting
+    var svp = parseFloat(goalieInfo[1][2].savePercentage).toFixed(3).toString();
+    var formattedSvp = svp.substring(1)
+    goalie3Sheet.getRange("C3").setValue(formattedSvp); 
+    goalie3Sheet.getRange("C4").setValue(parseFloat(goalieInfo[1][2].goalAgainstAverage).toFixed(2)); 
+  } 
+
+
+}
