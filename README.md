@@ -5,7 +5,7 @@ This script is used to populate a google sheet with relevant game day informatio
 
 I do need to go into the script once a year to update the API calls for the upcoming season, and have had to make some minor modifications to the script since I wrote it in 2020. It runs once a day via a trigger I set up in the Google Apps Script environment. 
 
-Here are the resulting Google Sheets: Opponent and stats update daily via the script. 
+Here are the resulting Google Sheets. Opponent and stats update daily via the script. 
 ![image](https://user-images.githubusercontent.com/38953871/161836803-2c74d8a1-4883-4fca-970d-005eca7f9922.png)
 ![image](https://user-images.githubusercontent.com/38953871/161836937-50072beb-1086-4547-9790-ce1a820d261b.png)
 ![image](https://user-images.githubusercontent.com/38953871/161836999-3f213b6c-63bb-4957-bb95-7dd177861bfb.png)
