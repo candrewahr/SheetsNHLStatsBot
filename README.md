@@ -1,5 +1,5 @@
 # SheetsNHLStatsBot
-Google Apps Script to automate stat collection for CanesCountry
+This repo contains a Google Apps Script to automate stat collection for CanesCountry
 
 This script is used to populate a google sheet with relevant game day information about the Carolina Hurricanes - but could be reasonably modified to supply info about any NHL team.  I wrote it in an effort to make Game Preview pieces a bit less tedious over at Canes Country dot com.  Instead of having to collect all of this information by hand a few times a week, this script is set up to hit the NHL APIs -- most of which have no documentation -- and present it in a nice readable format on a Google Sheet, which is then embedded in articles.  
 
